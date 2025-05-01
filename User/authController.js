@@ -352,3 +352,70 @@ exports.updateUserByEmail = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
+exports.getCodeforcesData = async (req, res) => {
+  const email = req.params.email; // Get the email from the request parameter
+
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required.' });
+  }
+
+  try {
+    // Fetch user by email from the database
+    const user = await User.findOne({ email });
+    if (!user || !user.codeforcesHandle) {
+      return res.status(404).json({ message: 'User not found or Codeforces handle missing.' });
+    }
+    const handle = user.codeforcesHandle;
+
+    // Fetch Codeforces User Info
+    const cfInfo = await axios.get(
+      `https://codeforces.com/api/user.info?handles=${handle}`
+    );
+
+    if (!cfInfo.data.result || cfInfo.data.result.length === 0) {
+      return res.status(404).json({ message: 'Codeforces user not found.' });
+    }
+
+    const userInfo = cfInfo.data.result[0];
+
+    // Fetch Codeforces User Status (Submission data)
+    const cfStatus = await axios.get(
+      `https://codeforces.com/api/user.status?handle=${handle}`
+    );
+
+    const submissions = cfStatus.data.result;
+    const solved = submissions.filter((sub) => sub.verdict === 'OK');
+
+    // Process solved problems and dates
+    const solvedDates = new Set();
+    const solvedStats = {};
+    const recentProblems = [];
+
+    solved.forEach((sub) => {
+      const date = new Date(sub.creationTimeSeconds * 1000).toLocaleDateString();
+      solvedStats[date] = (solvedStats[date] || 0) + 1;
+      solvedDates.add(new Date(sub.creationTimeSeconds * 1000).toDateString());
+
+      const problemKey = `${sub.problem.contestId}-${sub.problem.index}`;
+      if (!recentProblems.some((p) => p.key === problemKey)) {
+        recentProblems.push({
+          key: problemKey,
+          name: sub.problem.name,
+          link: `https://codeforces.com/contest/${sub.problem.contestId}/problem/${sub.problem.index}`,
+        });
+      }
+    });
+
+    return res.status(200).json({
+      cfData: userInfo,
+      solvedStats,
+      solvedDates: Array.from(solvedDates),
+      recentProblems: recentProblems.slice(0, 5),
+    });
+  } catch (err) {
+    console.error('Error fetching data from Codeforces', err);
+    return res.status(500).json({ message: 'Failed to fetch Codeforces data.' });
+  }
+};
+

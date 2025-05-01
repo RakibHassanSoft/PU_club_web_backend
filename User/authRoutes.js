@@ -11,6 +11,7 @@ router.get('/codeforces/stats', authController.getAllUsersCodeforcesStats);
 router.get('/top/cf', authController.getTopCodeforcesSolvers);
 router.get('/user/:email', authController.getUserByEmail);
 router.get('/users', authController.getAllUsers);
+router.get('/codeforces/:email', authController.getCodeforcesData);
 // router.get('/codeforcesSingle/:handle', authController.getCodeforcesSingleStats);
 
 // router.get('/user/approve/:email', authController.approveUser);
