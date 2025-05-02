@@ -204,8 +204,11 @@ exports.getUserByEmail = async (req, res) => {
 
 exports.getTopCodeforcesSolvers = async (req, res) => {
   try {
-    const now = new Date(); // current time
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // today at 00:00
+    const nowUTC = new Date(); // current UTC time
+    const now = new Date(nowUTC.getTime() + 6 * 60 * 60 * 1000); // BD time (UTC+6)
+
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0); // today at 00:00 in BD time
 
     // Step 1: Fetch users and get handles
     const users = await User.find();
@@ -227,17 +230,18 @@ exports.getTopCodeforcesSolvers = async (req, res) => {
       const submissionRes = await axios.get(`https://codeforces.com/api/user.status?handle=${handle}`);
       const submissions = submissionRes.data.result;
 
-      // Step 4: Filter for today’s AC submissions
+      // Step 4: Filter for today’s AC submissions (converted to BD time)
       const solvedToday = submissions.filter(sub => {
-        const time = new Date(sub.creationTimeSeconds * 1000); // convert to JS date
+        const timeUTC = new Date(sub.creationTimeSeconds * 1000);
+        const timeBD = new Date(timeUTC.getTime() + 6 * 60 * 60 * 1000); // Convert to BD time
         return (
-          time >= startOfDay &&
-          time <= now &&
+          timeBD >= startOfDay &&
+          timeBD <= now &&
           sub.verdict === 'OK'
         );
       });
 
-      // Count unique problems solved (optional)
+      // Count unique problems solved
       const uniqueProblems = new Set(
         solvedToday.map(sub => `${sub.problem.contestId}-${sub.problem.index}`)
       );
@@ -252,14 +256,13 @@ exports.getTopCodeforcesSolvers = async (req, res) => {
 
     // Step 5: Sort descending by total solved
     stats.sort((a, b) => b.totalSolvedToday - a.totalSolvedToday);
-  //  console.log(stats);
+
     return res.status(200).json(stats);
   } catch (err) {
     console.error(err.message);
     return res.status(500).json({ error: "Failed to fetch Codeforces stats" });
   }
 };
-
 
 
 exports.approveUser = async (req, res) => {
